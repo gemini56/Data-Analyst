@@ -2,12 +2,20 @@
 title: "Bellabeat Case Study"
 author: "Jenny"
 date: "8/19/2021"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ## Introduction and background
+Bellabeat is a high-tech company that manufactures health-focused smart product for women. The Comapny collects data on Activity, Sleep, Stress and Reproductive Health. The Company uses traditional advertising media, but focuses on digital marketing extensively (Google Search, Facebook, Instagram, Youtube and Twitter).
+In this scenario I will be playing a role of Junior Data Analyst and will present my analysis to the Bellabeart executive team along with my recommendations for Bellabeat's team marketing strategy. I will analyze smart device usage data in order to gain insight into how consumers use non-Bellabeat smart devices. These questions will guide my analysis:
+What are some trends in smart device usage?
+How could these trends apply to Bellabeat customers?
+How could these trends help influence Bellabeat marketing strategy?
 
-
+For the purpose of this research I was encouraged to use following public data:
+FitBit Fitness Tracker Data (CC0: Public Domain, dataset made available through Mobius): This Kaggle data set contains personal fitness tracker from thirty fitbit users. Thirty eligible Fitbit users consented to the submission of personal tracker data, including minute-level output for physical activity, heart rate, and sleep monitoring. It includes information about daily activity, steps, and heart rate that can be used to explore users’ habits. After brief exploration of the dataset, I can suggest that Data is Reliable, Original, Comprehensive, Current and Cited.
 
 
 ## Installing and loading common packages and libraries
@@ -15,17 +23,20 @@ output: html_document
 ```{r required packages}
 install.packages('tidyverse', repos = "http://cran.us.r-project.org")
 install.packages('ggplot2', repos = "http://cran.us.r-project.org")
+install.packages('ggthemes', repos ="http://cran.us.r-project.org")
+
 ```
 
 ```{r load library}
 library(tidyverse)  #helps wrangle data
 library(ggplot2)  #helps visualize data
+library(ggthemes)
 getwd() #displays my working directory
 setwd("//Users/jn/Case-study/CSV/Bellabeat-Case-Study") 
 ```
 
 
-## STEP 1: COLLECT DATA
+### STEP 1: COLLECT DATA
 
 ```{r}
 daily_activity <- read.csv("dailyActivity_merged.csv")
@@ -33,7 +44,7 @@ sleep_day <- read.csv("sleepDay_merged.csv")
 ```
 
 
-## STEP 2: Exploring a few key tables
+### STEP 2: Exploring a few key tables
 
 Take a look at the daily_activity data.
 ```{r}
@@ -57,13 +68,14 @@ colnames(sleep_day)
 
 Note that both datasets have the 'Id' field - this can be used to merge the datasets.
 
-## STEP 3: Understanding some summary statistics
-How many unique participants are there in each dataframe? It looks like there may be more participants in the daily activity dataset than the sleep dataset.
+### STEP 3: Understanding some summary statistics
+How many unique participants are there in each dataframe? 
 
 ```{r distinct users}
 n_distinct(daily_activity$Id)
 n_distinct(sleep_day$Id)
 ```
+There more participants in the daily activity dataset than the sleep dataset. The dataset contains information about 33 unique users and not 30 as advised initially. By all means sample size is not sufficient enough to provide accurate results. Within available data we see that Fitbit users do not use sleep-related and heart-related features as often as step and calories calculator. There is no information in relation to gender identity of the participants hence data analysis cannot be used to influence menstrual cycle-related products of the company. Data does not contain information about water consumption.
 
 How many observations are there in each dataframe?
 ```{r observations}
@@ -93,23 +105,30 @@ sleep_day %>%
 
 What does this tell us about how this sample of people's activities? 
 
-## STEP 4: Plotting a few explorations
+### STEP 4: Plotting a few explorations
 
-What's the relationship between steps taken in a day and sedentary minutes? How could this help inform the customer segments that we can market to? E.g. position this more as a way to get started in walking more? Or to measure steps that you're already taking?
+### What's the relationship between steps taken in a day and sedentary minutes? 
 
 ```{r}
-ggplot(data=daily_activity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point()
+ggplot(data=daily_activity, aes(x=TotalSteps, y=SedentaryMinutes)) + geom_point() +
+labs(title = "Total Steps vs Sedentary Minutes")+
+  xlab("Total Steps")+ylab("Sedentary Minutes")+
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  theme(plot.background = element_rect(fill = "lightblue"))
 ```
+### Scatter plot of changes in steps/day and changes in minutes of Sedentary.
 
 What's the relationship between minutes asleep and time in bed? You might expect it to be almost completely linear - are there any unexpected trends?
-
 ```{r}
-ggplot(data=sleep_day, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()
+ggplot(data=sleep_day, aes(x=TotalMinutesAsleep, y=TotalTimeInBed)) + geom_point()+
+labs(title = "Total Minutes Asleep vs Total Time in Bed",subtitle = "How much longer people stay in bed?")+
+  xlab("Total Minutes Asleep")+ylab("Total time in bed")+
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  theme(plot.background = element_rect(fill = "lightblue"))
+
 ```
 
-What could these trends tell you about how to help market this product? Or areas where you might want to explore further?
-
-## STEP 5: Merging these two datasets together
+### STEP 5: Merging these two datasets together
 
 ```{r}
 combined_data <- merge(sleep_day, daily_activity, by="Id")
@@ -120,4 +139,9 @@ Take a look at how many participants are in this data set.
 ```{r}
 n_distinct(combined_data$Id)
 ```
-
+## RECOMMENDATIONS
+* In order to provide more detailed and accurate data information, Bellabeat should collect their data or use an external data with at least 377 participants. This will allow to gain 95% confidence with a 5% margin error for the population size over 20000.
+* Moreover, it is important to receive information as accurate as possible. My suggestion is put additional effort into collecting and recording data to avoid discrepancy in amount of steps. After such development it is suggested to use the "accuracy" advantage in marketing strategy for Bellabeat Leaf and Bellabeat app. Such an advantage may increase the amount of sales for women. 
+* Based on Fibit's data we clearly see that people tends to use smart watch to calculate their step and calories more often than sleep tracker. Possibly it is connected with the fact that they charge their devices at night and it is impossible to make an entry to the log. I would suggest to provide Bellabeat app, Leaf and Time with an upgrade that will allow to track and monitor the movement while people are asleep. This automotive process will allow to receive more data about the users without enforcing customers to enter data manually.
+* It is clear from the graph that significant part of the participants stay in bed even when they are awake. Considering that there is a big chance that they are using their phones while being awake it is suggested to allow Leaf and Bellabeat app to provide a notification to drink more water. Since it is already established that the person is awake, the smart-bottle can make a reminder itself.
+* From the first graph we clearly see that if we walk more, it will help reduce the amount of time we spend sedentary each day. Besides,  encouraging people to walk more, we also encourage them to exercise more and to consume more water. So we can think about develop additional drink water notifications and reminders will positively influence both sales of the company and general health of the population.
