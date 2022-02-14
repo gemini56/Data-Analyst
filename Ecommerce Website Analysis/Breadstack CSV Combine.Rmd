@@ -1,0 +1,248 @@
+---
+title: "Breadstack csv combine"
+author: "Jenny"
+date: "11/17/2021"
+output: html_document
+---
+##### Install package
+
+```{r}
+# install.packages("tidyverse")
+#  install.packages("plyr", dependencies=T)
+# install.packages("knitr")
+# install.packages("rmarkdown")
+```
+
+
+
+```{r library}
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+```
+
+
+## Load file Sales BLG, CB, HA, MG
+
+```{r}
+setwd("F:/Code/Sales Data/BLG")
+BLG <- plyr:: ldply(list.files(), read.csv, header=TRUE)
+BLG_sale <- BLG %>% 
+  add_column(Shop = "BLG")
+```
+```{r}
+setwd("F:/Code/Sales Data/CB")
+CB <- plyr:: ldply(list.files(), read.csv, header=TRUE)
+CB_sale <- CB %>% 
+  add_column(Shop = "CB")
+```
+```{r}
+setwd("F:/Code/Sales Data/HA")
+HA <- plyr:: ldply(list.files(), read.csv, header=TRUE)
+HA_sale <- HA %>% 
+  add_column(Shop = "HA")
+```
+```{r}
+setwd("F:/Code/Sales Data/MG")
+MG <- plyr:: ldply(list.files(), read.csv, header=TRUE)
+MG_sale <- MG %>% 
+  add_column(Shop = "MG")
+```
+```{r}
+setwd("F:/Code/Sales Data/CNC")
+CNC <- plyr:: ldply(list.files(), read.csv,  header=TRUE)
+CNC_sale <- CNC %>% 
+  add_column(Shop = "CNC")
+```
+
+## Load file SKU
+
+```{r}
+setwd("F:/Code/Master SKU")
+master_sku <- read.csv("Master SKU - Master SKU.csv")
+print(master_sku)
+```
+
+# Remove the Shop name from flower SKU name
+```{r}
+master_sku$Product.Name <- str_replace(master_sku$Product.Name, "\\|HA\\| ", "")
+master_sku$Product.Name <- str_replace(master_sku$Product.Name, "\\|CB\\| ","")
+master_sku$Product.Name <- str_replace(master_sku$Product.Name, "\\|BLG\\| ", "")
+master_sku$Product.Name <- str_replace(master_sku$Product.Name, "\\|MG\\| ", "")
+master_sku$Product.Name <- str_squish(master_sku$Product.Name)
+
+```
+# Load File stock
+```{r}
+setwd("F:/Code/Stock")
+blg_stock <- read.csv("F:/Code/Stock/BLG/BLG.csv") %>% 
+  add_column(Shop = "BLG") 
+cb_stock <- read.csv("F:/Code/Stock/CB/CB.csv") %>% 
+  add_column(Shop = "CB") 
+ha_stock <- read.csv("F:/Code/Stock/HA/HA.csv") %>% 
+add_column(Shop = "HA")
+mg_stock <- read.csv("F:/Code/Stock/MG/MG.csv") %>% 
+add_column(Shop = "MG")
+stock <- rbind(blg_stock,cb_stock, ha_stock, mg_stock)
+```
+# Load file Customer Info
+```{r}
+library(dplyr)
+setwd("F:/Code/Customer Info")
+blg_customers <- read.csv("F:/Code/Customer Info/BLG.csv") %>% 
+  add_column(Shop = "BLG") 
+cb_customers <- read.csv("F:/Code/Customer Info/CB.csv") %>% 
+  add_column(Shop = "CB") 
+ha_customers <- read.csv("F:/Code/Customer Info/HA.csv") %>% 
+add_column(Shop = "HA")
+mg_customers <- read.csv("F:/Code/Customer Info/MG.csv") %>% 
+add_column(Shop = "MG")
+cnc_customers <- read.csv("F:/Code/Customer Info/CNC.csv") %>% 
+add_column(Shop = "CNC")
+customers <- rbind(blg_customers,cb_customers, ha_customers, mg_customers,cnc_customers) 
+customers$Unique_Customer_ID = paste(customers$Shop, "-", customers$Email)
+customers %>% 
+mutate(Last.Order.Date = as.Date(Last.Order.Date, format="%m-%d-%y"))
+customers$Last.Order.Date <- str_replace(customers$Last.Order.Date, "\\|User Name\\| ", "")
+```
+```{r}
+customers %>% 
+distinct(Unique_Customer_ID, .keep_all = TRUE)
+```
+```{r}
+customers_final <- rename(customers, c("Username" = "ï..User.Name", "Customer Name"= "Customer.Name", "Total Orders" = "Total.Orders", "Order History"= "Order.History", "Last Order Date" = "Last.Order.Date", "Unique Customer ID" = "Unique_Customer_ID" ))
+```
+
+```{r}
+write.csv(customers_final,file=paste0("F:/Data/Report/Customer Info/All Shop Customer List1.csv"),na = '',fileEncoding = 'UTF-8')
+```
+
+#Join different Shops into 1 dataframe
+```{r}
+allshop_sale <- rbind(BLG_sale, CB_sale, HA_sale,MG_sale, CNC_sale)
+```
+print(allshop_sale)
+str(allshop_sale)
+# Change data into the appropriate type
+```{r}
+allshop_sale$ï..Order.ID = as.character(allshop_sale$ï..Order.ID)
+allshop_sale$Time.of.Order.GMT = lubridate::as_datetime(allshop_sale$Time.of.Order.GMT) 
+
+```
+# Differentiate identical order ID or customer email from different shops
+```{r}
+allshop_sale$Unique_Customer_ID = paste(allshop_sale$Shop, "-", allshop_sale$Customer.Email)
+allshop_sale$Unique_Order_ID = paste(allshop_sale$Shop, "-", allshop_sale$ï..Order.ID )
+```
+str(allshop_sale)
+# Break Line Items into rows, then save to another dataframe 
+```{r}
+items <- select(allshop_sale,'Time.of.Order.GMT', 'Unique_Order_ID', 'Line.Items','Shop') 
+df_line_split <- items %>% 
+  dplyr:: mutate(line_items = str_split(Line.Items, "\\; ")) %>%
+  unnest(line_items) %>% 
+   dplyr:: mutate(order_id_plus_row_num = paste0(Unique_Order_ID, "-", row_number()))
+df_line_item_split <- df_line_split %>% 
+  mutate(line_items = str_split(line_items, "\\^ ")) %>% 
+  unnest(line_items)
+```
+```{r}
+df_line_item_split_named <- df_line_item_split %>% 
+  mutate(line_items = ifelse(
+    !str_detect(line_items, "^quantity|^SKU|^PID|^VID"), paste("Product.Name", line_items), line_items
+  ))
+df_line_item_split_named_separated <- df_line_item_split_named %>% 
+  extract(col="line_items", into = c("name","value"), regex="^(\\S+)\\s+(.*)") %>% 
+  filter(!is.na(name))
+final_items <- df_line_item_split_named_separated %>% 
+  pivot_wider(names_from = name, values_from = value)
+```
+
+#Fetch missing SKU using name
+
+```{r}
+final_items$quantity <- as.numeric(final_items$quantity)
+items <- final_items %>% drop_na(quantity)
+item_list <- select(items, "Time.of.Order.GMT","Unique_Order_ID", "Shop", "Product.Name", "quantity","SKU", "PID", "VID")
+```
+```{r}
+df2 <- full_join(item_list, master_sku, by = c("Product.Name", "Shop")) %>% 
+    mutate(SKU = coalesce(SKU.x, SKU.y))
+```
+```{r}
+df3 <- df2 %>% 
+  drop_na(quantity)
+
+```
+print(df3)
+```{r}
+df3a <- select(df3, -c(SKU.x, SKU.y,SKU.Type,ï..aa)) 
+```
+str(stock)
+```{r}
+stock1 = rename(stock, "PID"= "ï..Id", "Product.Name"= "Name")
+stock1$PID <- as.character(stock1$PID)
+```
+str(df3a)
+```{r}
+df3aa <- left_join(df3a, stock1, by = c("Product.Name", "PID")) %>% 
+     mutate(SKU = coalesce(SKU.x, SKU.y))
+df3aa %>% drop_na(quantity)
+```
+```{r}
+stock2 = rename(stock, "VID"= "ï..Id", "Product.Name"= "Name")
+stock2$VID <- as.character(stock2$VID)
+```
+```{r}
+df3_final <- left_join(df3aa, stock2, by = c("Product.Name", "VID")) %>% 
+     mutate(SKU = coalesce(SKU.x, SKU.y))
+df3_final %>% drop_na(quantity) 
+```
+str(df3_final)
+```{r}
+order_item <- df3_final %>% select(-Shop)
+order_item1 <- rename(order_item, c("Time of Order GMT" = "Time.of.Order.GMT", "Unique Order ID"= "Unique_Order_ID", "Item"= "Product.Name", "Quantity" = "quantity", "Shop" = "Shop.x" ))
+``` 
+```{r}
+final_order_item <- order_item1 %>% 
+  select(`Time of Order GMT`,`Unique Order ID`, `Shop`, `Item`, `Quantity`, `PID`, `VID`, `aa`, `SKU.check`, `Item.ID`, `Cost`, `MSRP`, `Brand`, `Product`,  `Characteristic`, `Strain`,`Weight`, `THC`, `CBD`, `PSI`, `Total.Potency`, `Type`, `Category`, `Category.status.HA`, `HA.Category.Changed.Date`, `HA.Category.Changed.By`, `Category.status.CB`, `CB.Category.Changed.Date`, `CB.Category.Changed.By`, `DIMENSION.L.X.W.X.H..cm.`, `SKU` )
+````
+```{r}
+write.csv(final_order_item,file=paste0("F:/Code/order_itemt.csv"),na = '',fileEncoding = 'UTF-8')
+```
+str(df3)
+```{r}
+df3_final %>% 
+  group_by(Unique_Order_ID) %>% 
+  summarise(totalquantity=sum(quantity)) %>% 
+arrange(desc(totalquantity))
+```
+
+
+```{r}
+allshop <- select(allshop_sale, -c(Line.Items)) 
+order_info <- rename(allshop, c("Order ID" = "ï..Order.ID", "Customer Email"= "Customer.Email", "No. of Items"= "No..of.Items", "Shipping Method"= "Shipping.Method", "Tracking ID" = "Tracking.ID", "Order Total ($)" ="Order.Total...." , "Order Status" ="Order.Status", "Total Discount" ="Total.Discount", "Unique Customer ID"= "Unique_Customer_ID", "Unique Order ID"= "Unique_Order_ID" ))
+head(order_info)
+```
+```{r}
+allshop$Order.Total.... <- as.numeric(paste(allshop$Order.Total....))
+allshop %>% distinct(Unique_Order_ID)
+allshop1 <- allshop %>% 
+  mutate(year =format(Time.of.Order.GMT, format ="%Y")) %>% 
+mutate(month =format(Time.of.Order.GMT, format ="%m"))
+allshop2 <- filter(allshop1,Order.Status == 'completed')
+  allshop2 %>% 
+group_by(Shop, year, month) %>% 
+summarise(totalrev= sum(as.numeric(Order.Total....))) 
+
+```
+```{r}
+write.csv(order_info,file=paste0("F:/Code/OrderList.csv"),na = '',fileEncoding = 'UTF-8')
+```
+Test sum of order
+```{r}
+allshop %>% 
+group_by(Shop) %>% 
+summarise(totalquantity= sum(as.numeric(No..of.Items)) %>% 
+arrange(desc(totalquantity))
+```

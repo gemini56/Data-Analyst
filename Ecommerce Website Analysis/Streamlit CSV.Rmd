@@ -1,0 +1,262 @@
+---
+title: "Streamlit CSV Combine"
+author: "Jenny"
+date: "11/17/2021"
+output: html_document
+---
+
+##### Install package
+
+```{r}
+# install.packages("tidyverse")
+  install.packages("plyr", dependencies=T)
+# install.packages("knitr")
+# install.packages("rmarkdown")
+```
+
+```{r library}
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+```
+
+#Load file BLG
+
+```{r}
+library(tidyverse)
+path <- "F:/Code/Sales Data/Streamlit/BLG"
+ blg <- list.files(path) %>% 
+  map_df(~ read_csv(paste0(path, "/", .x),  col_types = cols(
+           days_in_inventory = col_character(),
+           avg_quantity_mv_rate =col_character(),
+           benchmark_quantity_mv_rate=col_character())) %>% 
+           mutate(shop = "BLG",
+                  from = substr(.x, 5, 14),
+                  to   = substr(.x, 16, 25)))
+```
+view(blg)
+#Load file CB
+```{r}
+library(tidyverse)
+path <- "F:/Code/Sales Data/Streamlit/CB"
+ cb <- list.files(path) %>% 
+  map_df(~ read_csv(paste0(path, "/", .x),  col_types = cols(
+           days_in_inventory = col_character(),
+           avg_quantity_mv_rate =col_character(),
+           benchmark_quantity_mv_rate=col_character())) %>% 
+           mutate(shop = "CB",
+                  from = substr(.x, 4, 13),
+                  to   = substr(.x, 15, 24)))
+```
+#Load file HA
+```{r}
+library(tidyverse)
+path <- "F:/Code/Sales Data/Streamlit/HA"
+ ha <- list.files(path) %>% 
+  map_df(~ read_csv(paste0(path, "/", .x),  col_types = cols(
+           days_in_inventory = col_character(),
+           avg_quantity_mv_rate =col_character(),
+           benchmark_quantity_mv_rate=col_character())) %>% 
+           mutate(shop = "HA",
+                  from = substr(.x, 4, 13),
+                  to   = substr(.x, 15, 24)))
+```
+#Load file MG
+```{r}
+library(tidyverse)
+path <- "F:/Code/Sales Data/Streamlit/MG"
+ mg <- list.files(path) %>% 
+  map_df(~ read_csv(paste0(path, "/", .x),  col_types = cols(
+           days_in_inventory = col_character(),
+           avg_quantity_mv_rate =col_character(),
+           benchmark_quantity_mv_rate=col_character())) %>% 
+           mutate(shop = "MG",
+                  from = substr(.x, 16, 25),
+                  to   = substr(.x, 27, 36)))
+```
+
+```{r}
+library(tidyverse)
+path <- "F:/Code/Sales Data/Streamlit/CNC"
+ cnc <- list.files(path) %>% 
+  map_df(~ read_csv(paste0(path, "/", .x),  col_types = cols(
+           days_in_inventory = col_character(),
+           avg_quantity_mv_rate =col_character(),
+           benchmark_quantity_mv_rate=col_character())) %>% 
+           mutate(shop = "CNC",
+                  from = substr(.x, 12, 21),
+                  to   = substr(.x, 23, 32)))
+```
+sum(cnc$quantity_ordered)
+## Load file SKU
+
+```{r}
+setwd("F:/Code/Master SKU")
+master_sku <- read.csv("Master SKU - Master SKU.csv")
+print(master_sku)
+```
+
+# Remove the Shop name from flower SKU name
+```{r}
+master_sku$Product.Name<- str_replace(master_sku$Product.Name, "\\|HA\\| ", "")
+master_sku$Product.Name<- str_replace(master_sku$Product.Name, "\\|CB\\| ","")
+master_sku$Product.Name<- str_replace(master_sku$Product.Name, "\\|BLG\\| ", "")
+master_sku$Product.Name<- str_replace(master_sku$Product.Name, "\\|MG\\| ", "")
+master_sku$Product.Name<- str_squish(master_sku$Product.Name)
+```
+
+#Concat different Shops
+```{r}
+df <- rbind(blg, cb, ha, mg, cnc)
+df$from = lubridate::as_datetime(df$from) 
+df$to = lubridate::as_datetime(df$to) 
+df$duration <- difftime(df$to ,df$from , units = c("days"))
+df$duration <- as.numeric(df$duration) +1
+
+```
+#Filter the needed columns from df
+```{r}
+df1 <- select(df, 'SKU','name','quantity_ordered','total_sales','shop','from','to','duration')
+```
+```{r}
+df1$name <- str_replace(df1$name, "\\(", "") 
+df1$name <- str_replace(df1$name, "\\)", "") 
+df1$name <- str_replace(df1$name, "Special", "") 
+df1$name <- str_replace(df1$name, "special", "") 
+df1$name <- str_replace(df1$name, "grams", "g") 
+df1$name <- str_replace(df1$name, "Grams", "g") 
+df1$name <- str_replace(df1$name, " grams", "g") 
+df1$name <- str_replace(df1$name, " g", "g") 
+df1$name <- str_replace(df1$name, "28g", "- 28g") 
+df1$name <- str_replace(df1$name, "14g", "- 14g") 
+df1$name <- str_replace(df1$name, "7g", "- 7g") 
+df1$name <- str_replace(df1$name, "3.5g", "- 3.5g") 
+df1$name <- str_replace(df1$name, "2g", "- 2g") 
+df1$name <- str_replace(df1$name, "1g", "- 1g") 
+df1$name <- str_replace(df1$name, "- -", "-") 
+df1$name <- str_squish(df1$name)
+```
+```{r}
+require(dplyr)
+df1 = rename(df1, "Product.Name"= "name", "Shop"= "shop")
+print(df1)
+```
+
+#Find SKU using name
+```{r}
+library(dplyr)
+df2 <- left_join(df1, master_sku, by = c("Product.Name", "Shop")) %>%
+    mutate(SKU = coalesce(SKU.x, SKU.y))
+```
+```{r}
+df3 <- df2 %>% drop_na(total_sales) %>% drop_na(quantity_ordered)
+```
+view(df3)
+
+```{r}
+stream_list <- df3 %>%
+  select(-1, -12, -16,-(22:24))
+```
+
+```{r}
+stream_list$from = lubridate::as_datetime(stream_list$from) 
+stream_list$to = lubridate::as_datetime(stream_list$to) 
+stream_list$Cost = gsub("NA", "0", stream_list$Cost)
+stream_list$MSRP = gsub("NA", "0", stream_list$MSRP)
+stream_list$Cost = as.numeric(stream_list$Cost)
+stream_list$MSRP = as.numeric(stream_list$MSRP)
+```
+```{r}
+df4 <-stream_list %>% 
+  mutate(sold_at = total_sales / quantity_ordered) %>% 
+  mutate(avg_discount = MSRP - sold_at) %>% 
+  mutate(avg_profit = sold_at - Cost) %>% 
+  mutate(move_rate = quantity_ordered/duration) %>% 
+  mutate(total_cost= quantity_ordered*Cost) %>% 
+  mutate(avg_margin= avg_profit/Cost) %>% 
+  mutate(year =format(from, format ="%Y")) %>% 
+  mutate(month =format(from, format ="%m"))
+
+```
+
+```{r}
+df4 %>% 
+group_by(Shop, year, month) %>% 
+summarise(totalsale=sum(total_sales), totalorder= sum(quantity_ordered))
+
+```
+# Load File stock
+```{r}
+setwd("F:/Code/Stock")
+blg_stock <- read.csv("F:/Code/Stock/BLG/BLG.csv") %>% 
+  add_column(Shop = "BLG") 
+cb_stock <- read.csv("F:/Code/Stock/CB/CB.csv") %>% 
+  add_column(Shop = "CB") 
+ha_stock <- read.csv("F:/Code/Stock/HA/HA.csv") %>% 
+add_column(Shop = "HA")
+mg_stock <- read.csv("F:/Code/Stock/MG/MG.csv") %>% 
+add_column(Shop = "MG")
+stock <- rbind(blg_stock,cb_stock, ha_stock, mg_stock)
+```
+```{r}
+stock1 = rename(stock, "Product.Name"= "Name")
+```
+```{r}
+
+df4a <- left_join(df4, stock1, by = c("Product.Name", "Shop")) %>% 
+    mutate(SKU = coalesce(SKU.x, SKU.y))
+```
+```{r}
+df4a %>% 
+group_by(Shop, year, month) %>% 
+summarise(totalsale=sum(total_sales), totalorder= sum(quantity_ordered))
+
+```
+
+```{r}
+df4aa <- df4a %>% drop_na(total_sales) %>% drop_na(quantity_ordered)
+```
+```{r}
+df5 <- select(df4, SKU, Product.Name, quantity_ordered, total_sales, Shop, from, to, duration, SKU.Type, MSRP, Cost, Strain, Weight, Product, Characteristic, sold_at, avg_discount, avg_profit, avg_margin, total_cost, move_rate, year, month)
+```
+```{r}
+df5_final <- rename(df5, c("name" = "Product.Name", "SKU Type"= "SKU.Type", "From"= "from", "To" = "to", "Total Cost" = "total_cost", "Year" ="year", "Month"= "month" ))
+```
+```{r}
+write_csv(df5_final,"F:/Code/streamlist.csv")
+```
+write_csv(df,"F:/Code/df.csv")
+str(df4)
+
+```{r}
+df3$from = lubridate::as_datetime(df3$from) 
+df3$to = lubridate::as_datetime(df3$to) 
+
+```
+```{r}
+df3a <-df3 %>% 
+  mutate(year =format(from, format ="%Y")) %>% 
+  mutate(month =format(from, format ="%m"))
+```
+```{r}
+df5_final %>% 
+group_by(Shop, Year, Month) %>% 
+summarise(totalsale=sum(total_sales), totalorder= sum(quantity_ordered))
+
+```
+
+```{r}
+strlst <- read_csv( "F:/Data/New folder/Streamlist Items1.csv")
+strlst %>%
+group_by(Shop, Year, Month) %>%
+  summarise(ttsale=sum(total_sales), ttord= sum(quantity_ordered))
+```
+
+```{r}
+productlist <- read_csv("F:/Code/Productlist-CNC.csv") 
+productlist1 = rename(productlist, "name"= "Name")
+cnc_sku <- full_join(cnc, productlist1, by = c("name")) %>%
+    mutate(SKU = coalesce(SKU.x, SKU.y))
+str(cnc_sku)
+write_csv(cnc_sku,"F:/Code/cnc_sku.csv")
+```
