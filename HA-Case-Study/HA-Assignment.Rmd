@@ -1,0 +1,530 @@
+---
+title: "HA-Assignment"
+author: "Jenny"
+date: "10/4/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+### STEP 1: Ask
+<br>
+1.1 Business task
+<br>
+HA shop wants to find new opportunities to grow its business. For that reason, we are going to analyze information about its current customers utilizing the products offered by the company. The mission is to find trends in the data and make useful recommendations for the company.
+<br>
+1.2 Ask Question
+<br>
+What are the trends identified?
+<br>
+How could these trends help influence HA sale and marketing strategy?
+<br>
+### STEP 2: Prepare
+<br>
+2.1. ROCCC
+<br>
+* ROCCC is a method that we can use to check the quality of the data we have.
+<br>
+* Reliable — High — Reliable as it is collected directly from HA's customers. 
+<br>
+* Original — High — First party provider 
+<br>
+* Comprehensive — Hight — Parameters match most of Bellabeat products’ parameters
+<br>
+* Current — High — Data is just updated
+<br>
+* Cited — High — Data collected from first party
+
+2.2. Loading Packages
+
+```{r required packages}
+install.packages('tidyverse', repos = "http://cran.us.r-project.org")
+install.packages('ggplot2', repos = "http://cran.us.r-project.org")
+install.packages('ggthemes', repos ="http://cran.us.r-project.org")
+install.packages('plyr', repos ="http://cran.us.r-project.org") 
+
+```
+
+```{r load library}
+library(tidyverse)  #helps wrangle data
+library(ggplot2)  #helps visualize data
+library(ggthemes)
+library(plyr)
+library(dplyr)
+library(skimr)
+library(janitor)
+library(lubridate)
+library(ggrepel)
+getwd() #displays my working directory
+setwd("//Users/jn/Assignment") 
+```
+
+2.3. Importing data set
+
+```{r}
+sep_order_list <- read.csv("HA-Order-List-21 Sep.csv")
+```
+
+### STEP 3: Process
+<br>
+3.1 Viewing the datasets
+<br>
+Take a look at the sep_order_list data.
+```{r}
+head(sep_order_list)
+```
+
+Identify all the column in the sep_order_list data.
+```{r}
+colnames(sep_order_list)
+```
+
+3.2. Clean and format 
+<br>
+Now that we got to know more about our data structures we will process them to look for any errors and inconsistencies.
+Veryfying number of customers:
+```{r}
+n_unique(sep_order_list$customer_email)
+```
+We will now look for any duplicates:
+```{r}
+sum(duplicated(sep_order_list))
+```
+
+We want to ensure that column names are using right syntax and same format. We are changing the format of all columns to lower case. 
+```{r rename sep_order_list}
+sep_order_list_v2 <- clean_names(sep_order_list)
+rename_with(sep_order_list,tolower)
+```
+We change format of Time_of_order_gmt to date and time format
+
+```{r change format of Time_of_order_gmt}
+library(lubridate)
+sep_order_list_v2 %>%
+mutate(time_of_order_gmt = lubridate::as_datetime(time_of_order_gmt))
+````
+Create new column Province by extract Province from Billing
+```{r}
+library(tidyverse)
+territory_pattern = "Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland and Labrador| Northwest Territories|Nova Scotia|Nunavut|Ontario|Prince Edward Island|Quebec|Saskatchewan|Yukon"
+sep_order_list_v3 <- sep_order_list_v2 %>% 
+mutate(province = str_extract(billing, territory_pattern))
+```
+
+Calculate total orders based on order status
+```{r}
+table(sep_order_list_v3$order_status)
+```
+In September, we have total 8076 completed orders. We only count completed orders to analyze sale revenue.
+So, we need to filter completed orders by order status.
+```{r filter order by status}
+sep_order_list_v4 <-sep_order_list_v3 %>% filter(order_status == "completed")
+```
+
+Convert “Order_total” to numeric so we can run calculations on the data
+```{r}
+sep_order_list_v4$order_total <- as.numeric(as.character(sep_order_list_v4$order_total))
+is.numeric(sep_order_list_v4$order_total)
+```
+```{r}
+summary(sep_order_list_v4$order_total)
+```
+Add columns that list the date, day, and day of week. This will allow us to calculate order for each day, or week. 
+```{r}
+sep_order_list_v4$date <- as.Date(sep_order_list_v4$time_of_order_gmt)
+sep_order_list_v4$day <- format(as.Date(sep_order_list_v4$time_of_order_gmt), "%d")
+sep_order_list_v4$day_of_week <- format(as.Date(sep_order_list_v4$time_of_order_gmt), "%A")
+```
+```{r}
+sep_order_list_v4$week <- strftime(sep_order_list_v4$date, format = "%V") 
+```
+```{r}
+str(sep_order_list_v4)
+```
+Check missing date (if any) in date_of_order_gmt column:
+```{r}
+FullSeq <- seq.Date(from = min(sep_order_list_v4$date), to = max(sep_order_list_v4$date), by = 1)
+Missing <- FullSeq[!FullSeq %in% sep_order_list_v4$date]
+```
+This dataset has full date of 2021- Sep and 2021-Oct-01
+### STEP 4: Analyze
+<br>
+4.1. Total Sale Revenue
+<br>
+4.1.1. Daily Total Sale Revenue
+```{r}
+order_by_day<- sep_order_list_v4 %>% group_by(date) %>% 
+drop_na(order_total) %>% 
+summarise_at(vars(starts_with('order_total')), sum)
+```
+* Visualize Daily Total Sale Revenue
+```{r}
+order_by_day %>% 
+ggplot(aes(x = date, y = order_total)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Daily Sale Revenue")+
+  xlab("Date")+ylab("Total Revenue")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+4.1.2. Weekly Total Sale Revenue
+
+```{r}
+weekly_order <- sep_order_list_v4 %>% group_by(week) %>% 
+drop_na(order_total) %>% 
+summarise_at(vars(starts_with('order_total')), sum)
+```
+* Visualize Weekly Total Sale Revenue:
+```{r}
+weekly_order %>% 
+  ggplot(aes(x = week, y = order_total, fill= week)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Weekly Sale Revenue")+
+  xlab("Week")+ylab("Total Sale Revenue")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+   theme(text = element_text(size=10))
+```
+
+<br>
+4.1.3. Total Sale Revenue by day of week
+
+```{r}
+weekday_order <- sep_order_list_v4 %>% group_by(day_of_week) %>% 
+drop_na(order_total) %>% 
+summarise_at(vars(starts_with('order_total')), sum) 
+```
+Visualize Total Sale Revenue by day of week
+
+```{r}
+weekday_order %>% 
+ ggplot(aes(x = day_of_week, y = order_total, fill = day_of_week)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Sale Revenue by Day of Week")+
+  xlab("Day")+ylab("Total Sale Revenue")
+```
+<br>
+4.1.4. Total Sale Revenue by Province
+```{r}
+order_by_province <- sep_order_list_v4 %>%
+group_by(province) %>%
+drop_na(province) %>%
+summarise_at(vars(starts_with('order_total')), sum)
+```
+* Visualize order by province
+```{r}
+order_by_province %>% 
+ ggplot(aes(x = province, y = order_total, fill=province)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Sale Revenue by Province")+
+  xlab("Province")+ylab("Total Sale Revenue")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+4.2. Average order size
+<br>
+4.2.1. Average order size by day
+```{r}
+avg_daily_order <- sep_order_list_v4 %>% 
+  group_by(date) %>% 
+  arrange(date) %>% 
+  dplyr::summarise(avg_order = mean(order_total))
+```
+* Visualize daily avarage order
+```{r}
+avg_daily_order %>% 
+ggplot(aes(x = date, y = avg_order)) +
+  geom_col(position = "dodge") +
+labs(title = "Average daily order size")+
+  xlab("Date")+ylab("Average Order Size")+
+  theme(plot.background = element_rect(fill = "lightblue"))
+
+```
+<br>
+4.2.2. Average order size by week
+```{r}
+avg_weekly_order <- sep_order_list_v4 %>% 
+  group_by(week) %>% 
+  arrange(week) %>% 
+  dplyr::summarise(avg_order = mean(order_total))
+```
+* Visualize daily avarage order
+```{r}
+avg_weekly_order %>% 
+ggplot(aes(x = week, y = avg_order, fill = week)) +
+  geom_col(position = "dodge") +
+labs(title = "Average weekly order size")+
+  xlab("Week")+ylab("Average Order Size")+
+  theme(plot.background = element_rect(fill = "lightblue"))
+
+```
+<br>
+4.2.3. Average order size by Province
+```{r}
+avg_order_by_province <- sep_order_list_v4 %>% 
+  group_by(province) %>% 
+  drop_na(province) %>% 
+  dplyr:: summarise(avg_order = mean(order_total))
+```
+
+* Visualize daily avarage order
+```{r}
+avg_order_by_province %>% 
+ggplot(aes(x = province, y = avg_order, fill = province)) +
+  geom_col(position = "dodge") +
+labs(title = "Average order by Province")+
+  xlab("Province")+ylab("Average Order Size")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=8),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+
+```
+<br>
+4.3. Total discount
+<br>
+4.3.1. Total discount by day
+```{r}
+discount_by_day <- sep_order_list_v4 %>%
+group_by(date) %>%
+summarise_at(vars(starts_with('total_discount')), sum)
+```
+* Visualize total discount by day
+```{r}
+discount_by_day %>% 
+ggplot(aes(x = date, y = total_discount)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Discount by day")+
+  xlab("Day")+ylab("Total Discount")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+4.3.2. Total discount by week
+```{r}
+discount_by_week <- sep_order_list_v4 %>%
+group_by(week) %>%
+summarise_at(vars(starts_with('total_discount')), sum)
+```
+* Visualize total discount by week
+```{r}
+discount_by_week %>% 
+ggplot(aes(x = week, y = total_discount, fill=week)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Discount by week")+
+  xlab("Week")+ylab("Total Discount")+
+  theme(plot.background = element_rect(fill = "lightblue")) 
+
+```
+4.3.3. Total Discount by Day_of_Week
+```{r}
+discount_by_dayofweek <- sep_order_list_v4 %>%
+group_by(day_of_week) %>%
+summarise_at(vars(starts_with('total_discount')), sum)
+```
+* Visualize Total Discount by Day of Week
+```{r}
+discount_by_dayofweek %>% 
+ggplot(aes(x = day_of_week, y = total_discount, fill= day_of_week)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Discount by Day_of_Week")+
+  xlab("Day")+ylab("Total Discount")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+4.3.4. Total discount by Province
+```{r}
+discount_by_province <- sep_order_list_v4 %>%
+group_by(province) %>%
+drop_na(province) %>% 
+summarise_at(vars(starts_with('total_discount')), sum)
+```
+* Visualize total discount by Province
+```{r}
+discount_by_province %>% 
+ggplot(aes(x = province, y = total_discount, fill= province)) +
+  geom_col(position = "dodge") +
+labs(title = "Total Discount by Province")+
+  xlab("Province")+ylab("Total Discount")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+4.4. Most purchased items
+<br>
+We need to separate item from line_items first
+```{r separate item}
+df <- sep_order_list_v4 %>% 
+  janitor::clean_names() %>% 
+  select(date,week,order_id, province, line_items)
+df_line_split <- df %>% 
+  dplyr:: mutate(line_items = str_split(line_items, "\\; ")) %>%
+  unnest(line_items) %>% 
+   dplyr:: mutate(order_id_plus_row_num = paste0(order_id, "-", row_number()))
+```
+
+```{r}
+df_line_item_split <- df_line_split %>% 
+  mutate(line_items = str_split(line_items, "\\^ ")) %>% 
+  unnest(line_items)
+df_line_item_split_named <- df_line_item_split %>% 
+  mutate(line_items = ifelse(
+    !str_detect(line_items, "^quantity|^SKU|^PID|^VID"), paste("product", line_items), line_items
+  ))
+df_line_item_split_named_separated <- df_line_item_split_named %>% 
+  extract(col="line_items", into = c("name","value"), regex="^(\\S+)\\s+(.*)") %>% 
+  filter(!is.na(name))
+final_item <- df_line_item_split_named_separated %>% 
+  pivot_wider(names_from = name, values_from = value)
+view(final_item)
+```
+Change quantity column format to numeric:
+
+```{r}
+final_item$quantity<- as.numeric(as.character(final_item$quantity))
+is.numeric(final_item$quantity)
+```
+Clean ; in cells of PID column
+```{r}
+ final_item$PID <-gsub(";","",as.character(final_item$PID))
+```
+Find most purchased_items:
+```{r}
+most_purchased_items <- final_item %>% 
+  filter(!is.na(PID)) %>% 
+  dplyr::count(PID, product, sort = TRUE)
+```
+* Top 50 purchased items in September
+```{r}
+most_purchased_items %>% 
+slice_max(n, n=50)
+```
+Less popular items:
+```{r}
+most_purchased_items %>% 
+slice_min(n, n=1)
+```
+<br>
+4.4.1. Find most purchased item by date:
+```{r}
+most_purchased_item_by_date <- final_item %>% 
+  group_by(date) %>%  
+  filter(!is.na(PID)) %>% 
+  dplyr::count(PID,product) %>% 
+  slice_max(n, n=1)
+````
+```{r}
+most_purchased_item_by_date %>% 
+ ggplot(mapping = aes(x = date, y = n, color = product) ) + geom_point()+
+labs(title = "Most purchased item by date")+
+  xlab("Date")+ylab("Total of items")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=90, hjust=1)) 
+```
+<br>
+4.4.2. Most purchased item by week
+```{r}
+most_purchased_item_by_week <- final_item %>% 
+  group_by(week) %>%  filter(!is.na(PID)) %>% 
+  dplyr::count(PID,product) %>% 
+  slice_max(n, n=3)
+````
+* Visualize most purchased items by week
+```{r}
+most_purchased_item_by_week %>% 
+ ggplot(mapping = aes(x = week, y = n, color = product) ) + geom_point()+
+labs(title = "Most purchased item by week")+
+  xlab("Week")+ylab("Total of items")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=90, hjust=1)) 
+```
+<br>
+4.4.3. Most purchased items by Province
+```{r}
+most_purchased_item_by_province <- final_item %>% 
+  drop_na(province) %>% 
+  group_by(province) %>%  
+  filter(!is.na(PID)) %>% 
+  dplyr::count(PID,product) %>% 
+  slice_max(n, n=3)
+````
+* Visualize most purchased items by Province
+```{r}
+most_purchased_item_by_province %>% 
+ ggplot(mapping = aes(x = province, y = n, color = product) ) + geom_point()+
+labs(title = "Most purchased item by Province")+
+  xlab("Province")+ylab("Total of items")+
+  theme(plot.background = element_rect(fill = "lightblue")) +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1)) 
+```
+<br>
+5.1. Total Order vs Total Discount:
+```{r}
+sep_order_list_v4 %>%
+  select(order_total,
+         total_discount) %>%
+  summary()
+```
+```{r}
+ggplot(data=sep_order_list_v4, aes(x=total_discount, y=order_total)) + geom_point() +
+labs(title = "Total Order vs Total Discount")+
+  xlab("Total Discount")+ylab("Total Order")+
+  geom_smooth(se = FALSE, method = lm) +
+  theme(plot.background = element_rect(fill = "lightblue"))
+```
+4.5. Most purchased customers
+```{r}
+sep_order_list_v4 %>%
+group_by(customer_email) %>%
+summarise_at(vars(starts_with('order_total')), sum) %>% 
+slice_max(order_total, n= 10)
+```
+<br>
+### STEP 5: Share
+<br>
+There are some interesting insights I found in this data: Sales revenues, total discounts used was recorded in only September and can be biased since the trend and pattern can change by month. 
+<br>
+1) It seems that day_of_week have a positive impact for the business. The busiest days of the week for sales on HA shop are Thursday and Friday, lowest days for sale are Saturday and Sunday.
+<br>
+2) Geographic influences: Ontario was the biggest contributor to sale revenues in September, the second contributor is British Columbia. Northwest Territories and Yukon were recorded the lowest sale revenues.
+<br>
+3) Discounts affect to sales revenues: from the Total Order vs Total Discount graph we clearly see that if discounts help to increase sale revenue. Because the discounts attract more people, you have more potential buyers for other items in your store, as most people will look around to see what you offer before making a purchase.
+<br>
+4) According to most purchased item by date graph, we see Deal of The Day(PID388713) is most purchased item, it is also clearly that discount/promation help to boost sales revenue. 
+<br>
+Top 5 best-selling items in September:
+1. PID388713	Deal Of The Day  
+2. PID63008	Free Sativa Pre-Rolled Joint  
+3. PID63009	Free Indica Pre-Rolled Joint  
+4. PID983545	200mg THC Assorted Gummies (Sugar Jack's)  
+5. PID1746535	Free THC Snack Pack
+<br>
+* Top 5 daily best-selling items:
+1. PID388713	Deal Of The Day 
+2. PID983545	200mg THC Assorted Gummies (Sugar Jack's)  
+3. PID63008	Free Sativa Pre-Rolled Joint
+4. PID4505	Death Bubba - 28g
+5. PID63009	Free Indica Pre-Rolled Joint 
+<br>
+<br>
+Recommendations for HA:
+<br>
+* First-time shopping offers: Offering introductory discounts, or have specials such as buy 2-get-1-for half-price or free gift for the first three purchases. Especially, we should have exclusive promotion programs in specific province such as: Yukon and Northwest Territories to attract new customers and increase sale in these province. 
+<br>
+* Loyalty program: We can offer exclusive discounts or promotions to customer base — they’ll feel both excited and valued. Example, we can have monthly reward (platinum reward, gold reward, sliver reward) for customers who spent more than $C2,000, $C1500, $C500...
+<br>
+* Get rid of old inventory.: We can sell popular and less popular products together to get rid of old inventory.  Try creating kits that include less popular but related products to sell more of inventory. 
+<br>
+* Volume discounts: The more you buy, the more you save! Offering discounts for wholesale buying helps store gets rid of some inventory, sells more items, and keep customers happy.
+<br>
+* Weekend special offer campaigns: We see that total order volume is lowest on Saturday and Sunday. 
+Offer a weekend-only to boost more sales in the weekend. Customers only get those offer on Saturday, or Sunday.
